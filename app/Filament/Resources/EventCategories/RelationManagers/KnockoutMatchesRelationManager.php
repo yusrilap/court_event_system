@@ -13,6 +13,11 @@ use Filament\Actions\Action;
 use Filament\Notifications\Notification;
 use Filament\Support\Exceptions\Halt;
 use Illuminate\Support\Facades\DB;
+use App\Models\KnockoutMatch;
+use App\Models\KnockoutSlot;
+use App\Services\KnockoutSlotService;
+use DomainException;
+use Filament\Forms\Components\Select;
 
 class KnockoutMatchesRelationManager extends RelationManager
 {
@@ -23,6 +28,12 @@ class KnockoutMatchesRelationManager extends RelationManager
     public function table(Table $table): Table
     {
         return $table
+            ->modifyQueryUsing(
+                fn (Builder $query): Builder => $query->with([
+                    'slots.sourceGroup',
+                    'slots.sourceMatch',
+                ])
+            )
             ->heading('Pertandingan Fase Gugur')
             ->description(
                 'Struktur pertandingan dan sumber peserta dapat '
@@ -54,6 +65,28 @@ class KnockoutMatchesRelationManager extends RelationManager
                 TextColumn::make('position')
                     ->label('Nomor dalam Babak')
                     ->alignCenter(),
+
+                TextColumn::make('source_a')
+                    ->label('Sumber A')
+                    ->getStateUsing(
+                        fn (KnockoutMatch $record): ?string =>
+                            $this->slotSourceLabel(
+                                $record->slots->firstWhere('side', 'A')
+                            )
+                    )
+                    ->placeholder('Belum diatur')
+                    ->wrap(),
+
+                TextColumn::make('source_b')
+                    ->label('Sumber B')
+                    ->getStateUsing(
+                        fn (KnockoutMatch $record): ?string =>
+                            $this->slotSourceLabel(
+                                $record->slots->firstWhere('side', 'B')
+                            )
+                    )
+                    ->placeholder('Belum diatur')
+                    ->wrap(),
 
                 TextColumn::make('slots_count')
                     ->label('Slot Terisi')
@@ -96,7 +129,85 @@ class KnockoutMatchesRelationManager extends RelationManager
                     ->modalSubmitActionLabel('Buat Struktur')
                     ->action(fn () => $this->createBracketStructure()),
             ])
-            ->recordActions([])
+            ->recordActions([
+                Action::make('configureSlots')
+                    ->label('Atur Slot')
+                    ->icon(Heroicon::OutlinedPencilSquare)
+                    ->authorize(
+                        fn (): bool => EventCategoryResource::canEdit(
+                            $this->getOwnerRecord()
+                        )
+                    )
+                    ->modalHeading('Atur Sumber Peserta')
+                    ->modalSubmitActionLabel('Simpan Slot')
+                    ->fillForm(function (KnockoutMatch $record): array {
+                        $service = app(KnockoutSlotService::class);
+                        $slots = $record->slots()->get()->keyBy('side');
+
+                        return [
+                            'slot_a' => isset($slots['A'])
+                                ? $service->sourceKey($slots['A'])
+                                : null,
+
+                            'slot_b' => isset($slots['B'])
+                                ? $service->sourceKey($slots['B'])
+                                : null,
+                        ];
+                    })
+                    ->schema(function (KnockoutMatch $record): array {
+                        $sources = app(KnockoutSlotService::class)
+                            ->availableSources($record);
+
+                        $options = collect($sources)
+                            ->mapWithKeys(fn (array $source, string $key): array => [
+                                $key => $source['label'],
+                            ])
+                            ->all();
+
+                        return [
+                            Select::make('slot_a')
+                                ->label('Sumber Peserta A')
+                                ->options($options)
+                                ->native(false)
+                                ->required(),
+
+                            Select::make('slot_b')
+                                ->label('Sumber Peserta B')
+                                ->options($options)
+                                ->native(false)
+                                ->different('slot_a')
+                                ->validationMessages([
+                                    'different' => 'Sumber peserta A dan B harus berbeda.',
+                                ])
+                                ->required(),
+                        ];
+                    })
+                    ->action(function (
+                        KnockoutMatch $record,
+                        array $data,
+                    ): void {
+                        try {
+                            app(KnockoutSlotService::class)->save(
+                                $record,
+                                $data['slot_a'],
+                                $data['slot_b'],
+                            );
+                        } catch (DomainException $exception) {
+                            Notification::make()
+                                ->title('Slot belum dapat disimpan')
+                                ->body($exception->getMessage())
+                                ->danger()
+                                ->send();
+
+                            throw new Halt();
+                        }
+
+                        Notification::make()
+                            ->title('Sumber peserta berhasil disimpan')
+                            ->success()
+                            ->send();
+                    }),
+            ])
             ->toolbarActions([])
             ->emptyStateHeading('Bagan gugur belum dibuat')
             ->emptyStateDescription(
@@ -241,5 +352,44 @@ class KnockoutMatchesRelationManager extends RelationManager
             ->send();
 
         throw new Halt();
+    }
+
+    protected function slotSourceLabel(?KnockoutSlot $slot): ?string
+    {
+        if (! $slot) {
+            return null;
+        }
+
+        if ($slot->source_type === 'group_rank') {
+            $rankLabel = $slot->source_rank === 1
+                ? 'Juara'
+                : 'Runner-up';
+
+            $groupName = $slot->sourceGroup?->name
+                ?? 'Grup tidak ditemukan';
+
+            return "{$rankLabel} {$groupName}";
+        }
+
+        $sourceMatch = $slot->sourceMatch;
+
+        if (! $sourceMatch) {
+            return 'Pertandingan sumber tidak ditemukan';
+        }
+
+        $roundLabel = match ($sourceMatch->round) {
+            'round_of_16' => 'Babak 16 Besar',
+            'quarterfinal' => 'Perempat Final',
+            'semifinal' => 'Semifinal',
+            'final' => 'Final',
+            'third_place' => 'Perebutan Juara 3',
+            default => $sourceMatch->round,
+        };
+
+        $resultLabel = $slot->source_type === 'match_loser'
+            ? 'Yang kalah di'
+            : 'Pemenang';
+
+        return "{$resultLabel} {$roundLabel} {$sourceMatch->position}";
     }
 }
