@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 
 class Court extends Model
 {
@@ -26,5 +27,13 @@ class Court extends Model
     public function location(): BelongsTo
     {
         return $this->belongsTo(Location::class);
+    }
+    
+    public function events(): BelongsToMany
+    {
+        return $this->belongsToMany(
+            Event::class,
+            'event_court'
+        )->withTimestamps();
     }
 }

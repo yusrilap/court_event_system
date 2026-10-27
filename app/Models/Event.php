@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 
 class Event extends Model
 {
@@ -31,5 +32,13 @@ class Event extends Model
     public function categories(): HasMany
     {
         return $this->hasMany(EventCategory::class);
+    }
+
+    public function courts(): BelongsToMany
+    {
+        return $this->belongsToMany(
+            Court::class,
+            'event_court'
+        )->withTimestamps();
     }
 }

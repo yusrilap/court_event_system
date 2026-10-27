@@ -15,6 +15,7 @@ use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Table;
 use App\Filament\Resources\Events\RelationManagers\CategoriesRelationManager;
+use App\Filament\Resources\Events\RelationManagers\CourtsRelationManager;
 
 class EventResource extends Resource
 {
@@ -46,6 +47,7 @@ class EventResource extends Resource
     {
         return [
             CategoriesRelationManager::class,
+            CourtsRelationManager::class,
         ];
     }
 

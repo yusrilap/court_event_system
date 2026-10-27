@@ -11,6 +11,7 @@ use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Components\Utilities\Set;
 use Filament\Schemas\Schema;
 use Illuminate\Support\Str;
+use App\Models\Event;
 
 class EventForm
 {
@@ -65,7 +66,20 @@ class EventForm
                                 'tennis' => 'Tenis',
                             ])
                             ->required()
-                            ->native(false),
+                            ->native(false)
+                            ->disabled(function (?Event $record): bool {
+                                if (! $record) {
+                                    return false;
+                                }
+
+                                return $record->status !== 'draft'
+                                    || $record->categories()->exists()
+                                    || $record->courts()->exists();
+                            })
+                            ->helperText(
+                                'Cabang olahraga dikunci setelah kategori atau court ditambahkan, '
+                                . 'atau setelah event tidak lagi berstatus Draft.'
+                            ),
 
                         DatePicker::make('event_date')
                             ->label('Tanggal Event')
