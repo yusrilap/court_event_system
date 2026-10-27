@@ -12,6 +12,7 @@ use Filament\Schemas\Components\Utilities\Set;
 use Filament\Schemas\Schema;
 use Illuminate\Support\Str;
 use App\Models\Event;
+use Filament\Forms\Components\TimePicker;
 
 class EventForm
 {
@@ -123,6 +124,49 @@ class EventForm
                             ->maxLength(10000),
                     ])
                     ->columns(1)
+                    ->columnSpanFull(),
+
+                Section::make('Pengaturan Jadwal')
+                    ->description(
+                        'Waktu menggunakan WIB. Durasi slot pertandingan mengikuti '
+                        . 'pengaturan masing-masing kategori.'
+                    )
+                    ->schema([
+                        TimePicker::make('schedule_start_time')
+                            ->label('Waktu Mulai Pertandingan')
+                            ->seconds(false)
+                            ->native(false)
+                            ->format('H:i:s')
+                            ->displayFormat('H:i')
+                            ->helperText(
+                                'Digabungkan dengan tanggal event. Contoh: 08:00 WIB.'
+                            ),
+
+                        TextInput::make('court_gap_minutes')
+                            ->label('Jeda Antarpertandingan di Court')
+                            ->numeric()
+                            ->integer()
+                            ->minValue(0)
+                            ->maxValue(1440)
+                            ->suffix('menit')
+                            ->helperText(
+                                'Waktu jeda setelah satu pertandingan sebelum court '
+                                . 'dipakai kembali. Isi 0 jika tanpa jeda.'
+                            ),
+
+                        TextInput::make('player_rest_minutes')
+                            ->label('Istirahat Minimum Pemain')
+                            ->numeric()
+                            ->integer()
+                            ->minValue(0)
+                            ->maxValue(1440)
+                            ->suffix('menit')
+                            ->helperText(
+                                'Waktu minimum dari akhir pertandingan pemain '
+                                . 'hingga pertandingan berikutnya. Isi 0 jika tanpa jeda.'
+                            ),
+                    ])
+                    ->columns(3)
                     ->columnSpanFull(),
             ]);
     }

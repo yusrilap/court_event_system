@@ -18,6 +18,9 @@ class Event extends Model
         'technical_meeting',
         'rules',
         'is_published',
+        'schedule_start_time',
+        'court_gap_minutes',
+        'player_rest_minutes',
     ];
 
     protected function casts(): array
@@ -26,6 +29,8 @@ class Event extends Model
             'event_date' => 'date',
             'is_published' => 'boolean',
             'completed_at' => 'datetime',
+            'court_gap_minutes' => 'integer',
+            'player_rest_minutes' => 'integer',
         ];
     }
 
