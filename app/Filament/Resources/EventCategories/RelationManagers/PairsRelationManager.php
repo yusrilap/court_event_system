@@ -158,7 +158,39 @@ class PairsRelationManager extends RelationManager
                             $this->registerPair($data)
                     ),
             ])
-            ->recordActions([])
+            ->recordActions([
+                Action::make('assignGroup')
+                    ->label('Atur Grup')
+                    ->icon(Heroicon::OutlinedSquares2x2)
+                    ->modalHeading('Tempatkan Pasangan ke Grup')
+                    ->modalSubmitActionLabel('Simpan Penempatan')
+                    ->fillForm(fn (TournamentPair $record): array => [
+                        'tournament_group_id' => $record->tournament_group_id,
+                    ])
+                    ->schema([
+                        Select::make('tournament_group_id')
+                            ->label('Grup')
+                            ->options(
+                                fn (): array => $this->getOwnerRecord()
+                                    ->groups()
+                                    ->orderBy('sort_order')
+                                    ->pluck('name', 'id')
+                                    ->all()
+                            )
+                            ->helperText(
+                                'Pilihan hanya menampilkan grup dari kategori ini. '
+                                . 'Jika kosong, klik Buat Grup terlebih dahulu.'
+                            )
+                            ->native(false)
+                            ->required(),
+                    ])
+                    ->action(function (
+                        TournamentPair $record,
+                        array $data,
+                    ): void {
+                        $this->assignPairToGroup($record, $data);
+                    }),
+            ])
             ->toolbarActions([])
             ->defaultSort('id')
             ->emptyStateHeading('Belum ada pasangan')
@@ -352,6 +384,125 @@ class PairsRelationManager extends RelationManager
     {
         Notification::make()
             ->title('Grup belum dapat dibuat')
+            ->body($message)
+            ->danger()
+            ->send();
+
+        throw new Halt();
+    }
+
+    protected function assignPairToGroup(
+        TournamentPair $record,
+        array $data,
+    ): void {
+        $groupName = DB::transaction(function () use ($record, $data): string {
+            $category = EventCategory::query()
+                ->lockForUpdate()
+                ->findOrFail($this->getOwnerRecord()->getKey());
+
+            if ($category->event->status !== 'draft') {
+                $this->rejectGroupAssignment(
+                    'Penempatan grup hanya dapat diubah saat event berstatus Draft.'
+                );
+            }
+
+            $pairCount = (int) $category->pair_count;
+            $groupCount = (int) $category->group_count;
+
+            if (
+                ! in_array($pairCount, [8, 16], true) ||
+                ! in_array($groupCount, [1, 2, 4, 8], true)
+            ) {
+                $this->rejectGroupAssignment(
+                    'Lengkapi pengaturan jumlah pasangan dan grup terlebih dahulu.'
+                );
+            }
+
+            if (
+                $pairCount % $groupCount !== 0 ||
+                intdiv($pairCount, $groupCount) < 2
+            ) {
+                $this->rejectGroupAssignment(
+                    'Format grup tidak valid. Periksa pengaturan kategori.'
+                );
+            }
+
+            $groups = $category->groups()
+                ->lockForUpdate()
+                ->get();
+
+            if ($groups->count() !== $groupCount) {
+                $this->rejectGroupAssignment(
+                    'Jumlah grup yang tersedia tidak sesuai dengan pengaturan kategori.'
+                );
+            }
+
+            $targetGroupId = (int) $data['tournament_group_id'];
+
+            $targetGroup = $groups->first(
+                fn ($group): bool => (int) $group->id === $targetGroupId
+            );
+
+            if (! $targetGroup) {
+                $this->rejectGroupAssignment(
+                    'Grup tidak ditemukan dalam kategori ini.'
+                );
+            }
+
+            $pairs = $category->pairs()
+                ->lockForUpdate()
+                ->get();
+
+            $pair = $pairs->first(
+                fn (TournamentPair $item): bool =>
+                    (int) $item->id === (int) $record->id
+            );
+
+            if (! $pair) {
+                $this->rejectGroupAssignment(
+                    'Pasangan tidak ditemukan dalam kategori ini.'
+                );
+            }
+
+            if ($pairs->count() > $pairCount) {
+                $this->rejectGroupAssignment(
+                    'Jumlah pasangan terdaftar melebihi kapasitas kategori. '
+                    . 'Periksa kembali pengaturan format.'
+                );
+            }
+
+            $capacity = intdiv($pairCount, $groupCount);
+
+            $occupied = $pairs->filter(
+                fn (TournamentPair $item): bool =>
+                    $item->tournament_group_id === $targetGroupId &&
+                    (int) $item->id !== (int) $pair->id
+            )->count();
+
+            if ($occupied >= $capacity) {
+                $this->rejectGroupAssignment(
+                    "{$targetGroup->name} sudah penuh. "
+                    . "Kapasitas maksimal {$capacity} pasangan."
+                );
+            }
+
+            $pair->group()->associate($targetGroup);
+            $pair->save();
+
+            return $targetGroup->name;
+        });
+
+        Notification::make()
+            ->title('Penempatan grup berhasil disimpan')
+            ->body("Pasangan ditempatkan ke {$groupName}.")
+            ->success()
+            ->send();
+    }
+
+    protected function rejectGroupAssignment(string $message): never
+    {
+        Notification::make()
+            ->title('Penempatan grup belum dapat disimpan')
             ->body($message)
             ->danger()
             ->send();
