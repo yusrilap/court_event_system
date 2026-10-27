@@ -49,4 +49,12 @@ class EventCategory extends Model
             'event_category_id'
         );
     }
+
+    public function knockoutMatches(): HasMany
+    {
+        return $this->hasMany(
+            KnockoutMatch::class,
+            'event_category_id'
+        );
+    }
 }

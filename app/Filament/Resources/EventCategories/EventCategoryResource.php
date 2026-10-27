@@ -14,6 +14,7 @@ use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Table;
 use App\Filament\Resources\EventCategories\RelationManagers\PairsRelationManager;
+use App\Filament\Resources\EventCategories\RelationManagers\KnockoutMatchesRelationManager;
 
 class EventCategoryResource extends Resource
 {
@@ -43,6 +44,7 @@ class EventCategoryResource extends Resource
     {
         return [
             PairsRelationManager::class,
+            KnockoutMatchesRelationManager::class,
         ];
     }
 
