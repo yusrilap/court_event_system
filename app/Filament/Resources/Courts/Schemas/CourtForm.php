@@ -59,7 +59,11 @@ class CourtForm
                                 'Pilih lokasi aktif. Lokasi lama yang nonaktif '
                                 . 'tetap ditampilkan saat mengedit court terkait.'
                             )
-                            ->columnSpanFull(),
+                            ->columnSpanFull()
+                            ->disabled(
+                                fn (?Court $record): bool =>
+                                    $record?->events()->exists() ?? false
+                            ),
 
                         TextInput::make('name')
                             ->label('Nama Court')
@@ -87,7 +91,14 @@ class CourtForm
                                 'tennis' => 'Tenis',
                             ])
                             ->native(false)
-                            ->required(),
+                            ->required()
+                            ->disabled(
+                                fn (?Court $record): bool =>
+                                    $record?->events()->exists() ?? false
+                            )
+                            ->helperText(
+                                'Olahraga dikunci setelah court digunakan oleh event.'
+                            ),
 
                         Textarea::make('notes')
                             ->label('Catatan Internal')
