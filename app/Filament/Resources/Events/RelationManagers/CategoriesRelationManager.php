@@ -17,6 +17,9 @@ use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Toggle;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Components\Utilities\Get;
+use App\Filament\Resources\EventCategories\EventCategoryResource;
+use App\Models\EventCategory;
+use Filament\Actions\Action;
 
 class CategoriesRelationManager extends RelationManager
 {
@@ -258,11 +261,21 @@ class CategoriesRelationManager extends RelationManager
                     ->icon(Heroicon::OutlinedPlus)
                     ->modalHeading('Tambah Kategori Pertandingan'),
             ])
-            ->recordActions([ 
+            ->recordActions([
                 EditAction::make()
                     ->label('Edit')
                     ->icon(Heroicon::OutlinedPencilSquare)
                     ->modalHeading('Edit Kategori Pertandingan'),
+
+                Action::make('managePairs')
+                    ->label('Kelola Pasangan')
+                    ->icon(Heroicon::OutlinedUsers)
+                    ->url(
+                        fn (EventCategory $record): string =>
+                            EventCategoryResource::getUrl('edit', [
+                                'record' => $record,
+                            ])
+                    ),
             ])
             ->toolbarActions([])
             ->defaultSort('name')

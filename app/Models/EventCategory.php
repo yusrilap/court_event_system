@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class EventCategory extends Model
 {
@@ -31,5 +32,21 @@ class EventCategory extends Model
     public function event(): BelongsTo
     {
         return $this->belongsTo(Event::class);
+    }
+
+    public function pairs(): HasMany
+    {
+        return $this->hasMany(
+            TournamentPair::class,
+            'event_category_id'
+        );
+    }
+
+    public function groups(): HasMany
+    {
+        return $this->hasMany(
+            TournamentGroup::class,
+            'event_category_id'
+        );
     }
 }
