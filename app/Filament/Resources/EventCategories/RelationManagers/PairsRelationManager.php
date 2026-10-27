@@ -112,6 +112,8 @@ class PairsRelationManager extends RelationManager
     public function table(Table $table): Table
     {
         return $table
+            ->heading('Pasangan dan Pembagian Grup')
+            ->description(fn (): string => $this->groupReadinessSummary())
             ->recordTitleAttribute('id')
             ->modelLabel('Pasangan')
             ->pluralModelLabel('Pasangan')
@@ -508,5 +510,98 @@ class PairsRelationManager extends RelationManager
             ->send();
 
         throw new Halt();
+    }
+
+    protected function groupReadinessSummary(): string
+    {
+        $category = EventCategory::query()
+            ->findOrFail($this->getOwnerRecord()->getKey());
+
+        $pairs = $category->pairs()->get();
+        $groups = $category->groups()
+            ->orderBy('sort_order')
+            ->get();
+
+        $pairCount = (int) $category->pair_count;
+        $groupCount = (int) $category->group_count;
+
+        $registered = $pairs->count();
+
+        $unassigned = $pairs
+            ->whereNull('tournament_group_id')
+            ->count();
+
+        $parts = [
+            "Terdaftar: {$registered}/{$pairCount} pasangan",
+            "Belum ditempatkan: {$unassigned}",
+        ];
+
+        if (
+            ! in_array($pairCount, [8, 16], true) ||
+            ! in_array($groupCount, [1, 2, 4, 8], true)
+        ) {
+            $parts[] = 'Lengkapi pengaturan format kategori.';
+
+            return implode(' | ', $parts);
+        }
+
+        if (
+            $pairCount % $groupCount !== 0 ||
+            intdiv($pairCount, $groupCount) < 2
+        ) {
+            $parts[] = 'Format pembagian grup tidak valid.';
+
+            return implode(' | ', $parts);
+        }
+
+        $capacity = intdiv($pairCount, $groupCount);
+
+        $validGroupIds = $groups
+            ->map(fn ($group): int => (int) $group->id)
+            ->all();
+
+        $invalidAssignments = $pairs->filter(
+            fn (TournamentPair $pair): bool =>
+                $pair->tournament_group_id !== null &&
+                ! in_array(
+                    $pair->tournament_group_id,
+                    $validGroupIds,
+                    true
+                )
+        )->count();
+
+        $allGroupsFull = $groups->count() === $groupCount;
+
+        foreach ($groups as $group) {
+            $occupied = $pairs->filter(
+                fn (TournamentPair $pair): bool =>
+                    $pair->tournament_group_id === (int) $group->id
+            )->count();
+
+            $parts[] = "{$group->name}: {$occupied}/{$capacity}";
+
+            if ($occupied !== $capacity) {
+                $allGroupsFull = false;
+            }
+        }
+
+        if ($groups->count() !== $groupCount) {
+            $parts[] = "Grup tersedia: {$groups->count()}/{$groupCount}";
+        }
+
+        if ($invalidAssignments > 0) {
+            $parts[] = "{$invalidAssignments} pasangan memiliki grup tidak sesuai kategori";
+        }
+
+        $complete = $registered === $pairCount
+            && $unassigned === 0
+            && $invalidAssignments === 0
+            && $allGroupsFull;
+
+        $parts[] = $complete
+            ? 'Pembagian grup lengkap'
+            : 'Pembagian grup belum lengkap';
+
+        return implode(' | ', $parts);
     }
 }
