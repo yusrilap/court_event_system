@@ -20,6 +20,9 @@ use Filament\Schemas\Components\Utilities\Get;
 use App\Filament\Resources\EventCategories\EventCategoryResource;
 use App\Models\EventCategory;
 use Filament\Actions\Action;
+use Filament\Notifications\Notification;
+use Filament\Support\Exceptions\Halt;
+use Illuminate\Support\Facades\DB;
 
 class CategoriesRelationManager extends RelationManager
 {
@@ -86,7 +89,11 @@ class CategoriesRelationManager extends RelationManager
                             ])
                             ->required()
                             ->native(false)
-                            ->live(),
+                            ->live()
+                            ->disabled(
+                                fn (?EventCategory $record): bool =>
+                                    $record?->groups()->exists() ?? false
+                            ),
 
                         Select::make('group_count')
                             ->label('Jumlah Grup')
@@ -136,7 +143,11 @@ class CategoriesRelationManager extends RelationManager
                                         $fail('Setiap grup harus berisi minimal 2 pasangan.');
                                     }
                                 },
-                            ]),
+                            ])
+                            ->disabled(
+                                fn (?EventCategory $record): bool =>
+                                    $record?->groups()->exists() ?? false
+                            ),
 
                         Select::make('qualifiers_per_group')
                             ->label('Lolos per Grup')
@@ -196,7 +207,11 @@ class CategoriesRelationManager extends RelationManager
                                         );
                                     }
                                 },
-                            ]),
+                            ])
+                            ->disabled(
+                                fn (?EventCategory $record): bool =>
+                                    $record?->groups()->exists() ?? false
+                            ),
 
                         Toggle::make('has_third_place_match')
                             ->label('Adakan Perebutan Juara 3')
@@ -225,6 +240,10 @@ class CategoriesRelationManager extends RelationManager
                                     }
                                 },
                             ])
+                            ->disabled(
+                                fn (?EventCategory $record): bool =>
+                                    $record?->groups()->exists() ?? false
+                            )
                             ->columnSpanFull(),
                     ])
                     ->columns(2)
@@ -265,7 +284,11 @@ class CategoriesRelationManager extends RelationManager
                 EditAction::make()
                     ->label('Edit')
                     ->icon(Heroicon::OutlinedPencilSquare)
-                    ->modalHeading('Edit Kategori Pertandingan'),
+                    ->modalHeading('Edit Kategori Pertandingan')
+                    ->using(
+                        fn (EventCategory $record, array $data): EventCategory =>
+                            $this->saveCategoryChanges($record, $data)
+                    ),
 
                 Action::make('managePairs')
                     ->label('Kelola Pasangan')
@@ -284,5 +307,75 @@ class CategoriesRelationManager extends RelationManager
                 'Tambahkan kategori pertandingan untuk event ini.'
             )
             ->emptyStateIcon(Heroicon::OutlinedSquares2x2);
+    }
+
+    protected function saveCategoryChanges(
+        EventCategory $record,
+        array $data,
+    ): EventCategory {
+        return DB::transaction(function () use ($record, $data): EventCategory {
+            $category = EventCategory::query()
+                ->where('event_id', $this->getOwnerRecord()->getKey())
+                ->lockForUpdate()
+                ->findOrFail($record->getKey());
+
+            if ($category->event->status !== 'draft') {
+                $this->rejectCategoryChanges(
+                    'Kategori hanya dapat diubah saat event berstatus Draft.'
+                );
+            }
+
+            $groups = $category->groups()
+                ->lockForUpdate()
+                ->get();
+
+            $pairs = $category->pairs()
+                ->lockForUpdate()
+                ->get();
+
+            $category->fill($data);
+
+            $formatFields = [
+                'pair_count',
+                'group_count',
+                'qualifiers_per_group',
+                'has_third_place_match',
+            ];
+
+            if (
+                $groups->isNotEmpty() &&
+                $category->isDirty($formatFields)
+            ) {
+                $this->rejectCategoryChanges(
+                    'Format sudah dikunci karena grup telah dibuat. '
+                    . 'Tutup lalu buka kembali form untuk melihat data terbaru.'
+                );
+            }
+
+            if (
+                $pairs->isNotEmpty() &&
+                (int) $category->pair_count < $pairs->count()
+            ) {
+                $this->rejectCategoryChanges(
+                    'Kapasitas kategori tidak boleh lebih kecil '
+                    . 'dari jumlah pasangan yang sudah terdaftar.'
+                );
+            }
+
+            $category->save();
+
+            return $category;
+        });
+    }
+
+    protected function rejectCategoryChanges(string $message): never
+    {
+        Notification::make()
+            ->title('Perubahan kategori belum dapat disimpan')
+            ->body($message)
+            ->danger()
+            ->send();
+
+        throw new Halt();
     }
 }
