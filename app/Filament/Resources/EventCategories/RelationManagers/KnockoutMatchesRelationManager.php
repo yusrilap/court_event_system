@@ -18,6 +18,7 @@ use App\Models\KnockoutSlot;
 use App\Services\KnockoutSlotService;
 use DomainException;
 use Filament\Forms\Components\Select;
+use App\Services\KnockoutBracketValidator;
 
 class KnockoutMatchesRelationManager extends RelationManager
 {
@@ -111,23 +112,52 @@ class KnockoutMatchesRelationManager extends RelationManager
                     ->orderBy('position')
             )
             ->headerActions([
-                Action::make('createBracket')
-                    ->label('Buat Struktur Bagan')
-                    ->icon(Heroicon::OutlinedTrophy)
+                Action::make('checkBracket')
+                    ->label('Periksa Bagan')
+                    ->icon(Heroicon::OutlinedClipboardDocumentCheck)
+                    ->color('gray')
                     ->authorize(
-                        fn (): bool => EventCategoryResource::canEdit(
+                        fn (): bool => EventCategoryResource::canView(
                             $this->getOwnerRecord()
                         )
                     )
-                    ->requiresConfirmation()
-                    ->modalHeading('Buat Struktur Bagan Gugur')
-                    ->modalDescription(
-                        'Pertandingan akan dibuat sesuai jumlah pasangan lolos. '
-                        . 'Sumber peserta setiap slot diatur setelah struktur dibuat. '
-                        . 'Bagan yang sudah ada tidak akan ditimpa.'
-                    )
-                    ->modalSubmitActionLabel('Buat Struktur')
-                    ->action(fn () => $this->createBracketStructure()),
+                    ->action(function (): void {
+                        $errors = app(KnockoutBracketValidator::class)
+                            ->errors($this->getOwnerRecord());
+
+                        if ($errors === []) {
+                            Notification::make()
+                                ->title('Struktur bagan lengkap')
+                                ->body(
+                                    'Semua pertandingan memiliki slot A dan B. '
+                                    . 'Sumber kelolosan serta jalur menuju final '
+                                    . 'dan juara 3 sesuai dengan format kategori.'
+                                )
+                                ->success()
+                                ->send();
+
+                            return;
+                        }
+
+                        Notification::make()
+                            ->title('Bagan belum lengkap atau belum sesuai')
+                            ->body(
+                                'Ditemukan ' . count($errors)
+                                . ' masalah. Periksa rincian notifikasi berikut.'
+                            )
+                            ->warning()
+                            ->persistent()
+                            ->send();
+
+                        foreach ($errors as $index => $message) {
+                            Notification::make()
+                                ->title('Pemeriksaan ' . ($index + 1))
+                                ->body($message)
+                                ->warning()
+                                ->persistent()
+                                ->send();
+                        }
+                    }),
             ])
             ->recordActions([
                 Action::make('configureSlots')
