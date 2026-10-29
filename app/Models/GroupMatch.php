@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class GroupMatch extends Model
 {
@@ -44,5 +45,10 @@ class GroupMatch extends Model
             TournamentPair::class,
             'pair_two_id'
         );
+    }
+
+    public function schedule(): HasOne
+    {
+        return $this->hasOne(MatchSchedule::class, 'group_match_id');
     }
 }

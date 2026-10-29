@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Court extends Model
 {
@@ -35,5 +36,10 @@ class Court extends Model
             Event::class,
             'event_court'
         )->withTimestamps();
+    }
+
+    public function schedules(): HasMany
+    {
+        return $this->hasMany(MatchSchedule::class, 'court_id');
     }
 }

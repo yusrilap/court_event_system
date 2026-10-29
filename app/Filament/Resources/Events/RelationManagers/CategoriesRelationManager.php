@@ -23,6 +23,8 @@ use Filament\Actions\Action;
 use Filament\Notifications\Notification;
 use Filament\Support\Exceptions\Halt;
 use Illuminate\Support\Facades\DB;
+use App\Models\Event;
+
 
 class CategoriesRelationManager extends RelationManager
 {
@@ -277,6 +279,10 @@ class CategoriesRelationManager extends RelationManager
             ->headerActions([
                 CreateAction::make()
                     ->label('Tambah Kategori')
+                    ->using(
+                        fn (array $data): EventCategory =>
+                            $this->createCategorySafely($data)
+                    )
                     ->icon(Heroicon::OutlinedPlus)
                     ->modalHeading('Tambah Kategori Pertandingan'),
             ])
@@ -313,6 +319,7 @@ class CategoriesRelationManager extends RelationManager
         EventCategory $record,
         array $data,
     ): EventCategory {
+        $this->lockScheduleChanges();
         return DB::transaction(function () use ($record, $data): EventCategory {
             $category = EventCategory::query()
                 ->where('event_id', $this->getOwnerRecord()->getKey())
@@ -334,6 +341,26 @@ class CategoriesRelationManager extends RelationManager
                 ->get();
 
             $category->fill($data);
+
+            $scheduleFields = [
+                'slot_duration_minutes',
+                'pair_count',
+                'group_count',
+                'qualifiers_per_group',
+                'has_third_place_match',
+            ];
+
+            if ($category->isDirty($scheduleFields)) {
+                $event = Event::query()
+                    ->findOrFail($category->event_id);
+
+                if ($event->hasSchedules()) {
+                    $this->rejectScheduledCategoryChange(
+                        'Event sudah memiliki jadwal. Durasi dan format '
+                        . 'kategori tidak dapat diubah melalui form kategori.'
+                    );
+                }
+            }
 
             $formatFields = [
                 'pair_count',
@@ -377,5 +404,55 @@ class CategoriesRelationManager extends RelationManager
             ->send();
 
         throw new Halt();
+    }
+
+    private function lockScheduleChanges(): void
+    {
+        $lock = DB::table('schedule_locks')
+            ->where('name', 'global')
+            ->lockForUpdate()
+            ->first();
+
+        if ($lock === null) {
+            $this->rejectScheduledCategoryChange(
+                'Pengunci penjadwalan belum tersedia. Jalankan migration terlebih dahulu.'
+            );
+        }
+    }
+
+    private function rejectScheduledCategoryChange(string $message): never
+    {
+        Notification::make()
+            ->title('Perubahan kategori ditolak')
+            ->body($message)
+            ->danger()
+            ->send();
+
+        throw new Halt();
+    }
+
+    private function createCategorySafely(array $data): EventCategory
+    {
+        return DB::transaction(function () use ($data): EventCategory {
+            $this->lockScheduleChanges();
+
+            $event = Event::query()
+                ->lockForUpdate()
+                ->findOrFail($this->getOwnerRecord()->getKey());
+
+            if ($event->status !== 'draft') {
+                $this->rejectScheduledCategoryChange(
+                    'Kategori hanya dapat ditambahkan saat event berstatus draft.'
+                );
+            }
+
+            if ($event->hasSchedules()) {
+                $this->rejectScheduledCategoryChange(
+                    'Event sudah memiliki jadwal. Kategori baru tidak dapat ditambahkan.'
+                );
+            }
+
+            return $event->categories()->create($data);
+        }, 3);
     }
 }

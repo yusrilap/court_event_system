@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class KnockoutMatch extends Model
 {
@@ -42,5 +43,10 @@ class KnockoutMatch extends Model
             KnockoutSlot::class,
             'source_match_id'
         );
+    }
+
+    public function schedule(): HasOne
+    {
+        return $this->hasOne(MatchSchedule::class, 'knockout_match_id');
     }
 }

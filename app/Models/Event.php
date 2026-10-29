@@ -46,4 +46,25 @@ class Event extends Model
             'event_court'
         )->withTimestamps();
     }
+
+    public function hasSchedules(): bool
+    {
+        $eventId = $this->getKey();
+
+        return MatchSchedule::query()
+            ->where(function ($query) use ($eventId) {
+                $query
+                    ->whereHas(
+                        'groupMatch.group.category',
+                        fn ($category) =>
+                            $category->where('event_id', $eventId)
+                    )
+                    ->orWhereHas(
+                        'knockoutMatch.category',
+                        fn ($category) =>
+                            $category->where('event_id', $eventId)
+                    );
+            })
+            ->exists();
+    }
 }
