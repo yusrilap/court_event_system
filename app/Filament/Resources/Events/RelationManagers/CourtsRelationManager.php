@@ -135,9 +135,29 @@ class CourtsRelationManager extends RelationManager
     protected function addCourtToEvent(array $data): void
     {
         DB::transaction(function () use ($data): void {
+
+            $lock = DB::table('schedule_locks')
+                ->where('name', 'global')
+                ->lockForUpdate()
+                ->first();
+
+
+            if ($lock === null) {
+                $this->rejectCourtSelection(
+                    'Pengunci penjadwalan belum tersedia. Jalankan migration terlebih dahulu.'
+                );
+            }
+
             $event = Event::query()
                 ->lockForUpdate()
                 ->findOrFail($this->getOwnerRecord()->getKey());
+
+            if ($event->hasSchedules()) {
+                $this->rejectCourtSelection(
+                    'Event sudah memiliki jadwal. Court tambahan tidak dapat '
+                    . 'dimasukkan melalui pengaturan awal event.'
+                );
+            }
 
             if ($event->status !== 'draft') {
                 $this->rejectCourtSelection(

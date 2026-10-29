@@ -7,6 +7,7 @@ use App\Models\KnockoutMatch;
 use App\Models\KnockoutSlot;
 use DomainException;
 use Illuminate\Support\Facades\DB;
+use App\Models\Event;
 
 class KnockoutSlotService
 {
@@ -144,10 +145,33 @@ class KnockoutSlotService
         string $slotA,
         string $slotB,
     ): void {
+
+        $lock = DB::table('schedule_locks')
+            ->where('name', 'global')
+            ->lockForUpdate()
+            ->first();
+
+        if ($lock === null) {
+            throw new DomainException(
+                'Pengunci penjadwalan belum tersedia. Jalankan migration terlebih dahulu.'
+            );
+        }
+
         DB::transaction(function () use ($match, $slotA, $slotB): void {
             $category = EventCategory::query()
                 ->lockForUpdate()
                 ->findOrFail($match->event_category_id);
+
+            $event = Event::query()
+                ->findOrFail($category->event_id);
+
+            if ($event->hasSchedules()) {
+                throw new DomainException(
+                    'Event sudah memiliki jadwal. Sumber slot bagan gugur '
+                    . 'tidak dapat diubah karena memengaruhi peserta '
+                    . 'dan urutan pertandingan.'
+                );
+            }
 
             if ($category->event->status !== 'draft') {
                 throw new DomainException(
