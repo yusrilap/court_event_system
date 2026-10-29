@@ -408,6 +408,12 @@ class PairsRelationManager extends RelationManager
                 );
             }
 
+            if ($category->groupMatches()->exists()) {
+                $this->rejectGroupAssignment(
+                    'Penempatan grup sudah dikunci karena pertandingan grup telah dibuat.'
+                );
+            }
+
             $pairCount = (int) $category->pair_count;
             $groupCount = (int) $category->group_count;
 

@@ -35,4 +35,9 @@ class TournamentGroup extends Model
             'tournament_group_id'
         );
     }
+
+    public function matches(): HasMany
+    {
+        return $this->hasMany(GroupMatch::class, 'tournament_group_id');
+    }
 }

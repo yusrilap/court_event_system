@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasManyThrough;
 
 class EventCategory extends Model
 {
@@ -55,6 +56,18 @@ class EventCategory extends Model
         return $this->hasMany(
             KnockoutMatch::class,
             'event_category_id'
+        );
+    }
+
+    public function groupMatches(): HasManyThrough
+    {
+        return $this->hasManyThrough(
+            GroupMatch::class,
+            TournamentGroup::class,
+            'event_category_id',
+            'tournament_group_id',
+            'id',
+            'id'
         );
     }
 }
