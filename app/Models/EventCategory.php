@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasManyThrough;
 
+
 class EventCategory extends Model
 {
     protected $fillable = [
@@ -68,6 +69,14 @@ class EventCategory extends Model
             'tournament_group_id',
             'id',
             'id'
+        );
+    }
+
+    public function scoringRules(): HasMany
+    {
+        return $this->hasMany(
+            CategoryScoringRule::class,
+            'event_category_id'
         );
     }
 }
