@@ -10,6 +10,10 @@ use Filament\Notifications\Notification;
 use Filament\Support\Exceptions\Halt;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\DB;
+use App\Services\EventStartService;
+use DomainException;
+use Filament\Actions\Action;
+use Filament\Support\Icons\Heroicon;
 
 
 class EditEvent extends EditRecord
@@ -20,6 +24,7 @@ class EditEvent extends EditRecord
     {
         return [
             DeleteAction::make(),
+            $this->startEventAction(),
         ];
     }
 
@@ -102,5 +107,67 @@ class EditEvent extends EditRecord
 
             return $event;
         }, 3);
+    }
+
+    protected function startEventAction(): Action
+    {
+        return Action::make('startEvent')
+            ->label('Mulai Event')
+            ->icon(Heroicon::OutlinedPlay)
+            ->color('success')
+            ->visible(
+                fn (): bool => $this->getRecord()->status === 'draft'
+            )
+            ->authorize(
+                fn (): bool => EventResource::canEdit($this->getRecord())
+            )
+            ->requiresConfirmation()
+            ->modalHeading('Mulai Event')
+            ->modalDescription(
+                fn (): string =>
+                    'Mulai event "' . $this->getRecord()->name . '"? '
+                    . 'Sistem akan memeriksa kelengkapan pertandingan, '
+                    . 'jadwal, dan aturan skor seluruh kategori. '
+                    . 'Status akan berubah menjadi berlangsung. '
+                    . 'Publikasi kepada peserta tidak berubah.'
+            )
+            ->modalSubmitActionLabel('Ya, Mulai Event')
+            ->action(function (): void {
+                $event = $this->getRecord()->fresh();
+
+                abort_unless(
+                    $event !== null && EventResource::canEdit($event),
+                    403
+                );
+
+                try {
+                    app(EventStartService::class)->start($event);
+                } catch (DomainException $exception) {
+                    Notification::make()
+                        ->title('Event belum dapat dimulai')
+                        ->body($exception->getMessage())
+                        ->danger()
+                        ->persistent()
+                        ->send();
+
+                    throw new Halt();
+                }
+
+                Notification::make()
+                    ->title('Event berhasil dimulai')
+                    ->body(
+                        'Status event sekarang berlangsung. '
+                        . 'Pencatatan hasil dapat dilakukan setelah '
+                        . 'form input skor tersedia.'
+                    )
+                    ->success()
+                    ->send();
+
+                $this->redirect(
+                    EventResource::getUrl('edit', [
+                        'record' => $event->getKey(),
+                    ])
+                );
+            });
     }
 }

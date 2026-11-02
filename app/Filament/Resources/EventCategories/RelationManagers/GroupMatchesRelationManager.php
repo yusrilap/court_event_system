@@ -16,6 +16,10 @@ use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
+use App\Models\User;
+use App\Services\GroupMatchResultService;
+use Filament\Facades\Filament;
+use Filament\Forms\Components\TextInput;
 
 class GroupMatchesRelationManager extends RelationManager
 {
@@ -68,6 +72,25 @@ class GroupMatchesRelationManager extends RelationManager
                             $this->pairLabel($record->pairTwo)
                     )
                     ->wrap(),
+
+                TextColumn::make('final_score')
+                    ->label('Skor Akhir')
+                    ->getStateUsing(
+                        fn (GroupMatch $record): ?string =>
+                            $record->score_one !== null &&
+                            $record->score_two !== null
+                                ? "{$record->score_one} – {$record->score_two}"
+                                : null
+                    )
+                    ->placeholder('Belum diisi')
+                    ->badge(),
+
+                TextColumn::make('result_recorded_at')
+                    ->label('Hasil Dicatat (WIB)')
+                    ->dateTime('d/m/Y H:i')
+                    ->timezone('Asia/Jakarta')
+                    ->placeholder('Belum dicatat')
+                    ->toggleable(isToggledHiddenByDefault: true),    
 
                 TextColumn::make('status')
                     ->label('Status')
@@ -135,7 +158,99 @@ class GroupMatchesRelationManager extends RelationManager
                             ->send();
                     }),
             ])
-            ->recordActions([])
+            ->recordActions([
+                Action::make('recordResult')
+                    ->label('Input Skor')
+                    ->icon(Heroicon::OutlinedPencilSquare)
+                    ->color('success')
+                    ->visible(
+                        fn (GroupMatch $record): bool =>
+                            $record->status === 'pending' &&
+                            $this->getOwnerRecord()->event?->status === 'ongoing'
+                    )
+                    ->authorize(
+                        fn (): bool => EventCategoryResource::canEdit(
+                            $this->getOwnerRecord()
+                        )
+                    )
+                    ->modalHeading('Input Skor Akhir')
+                    ->modalDescription(function (): string {
+                        $rule = $this->getOwnerRecord()
+                            ->scoringRules()
+                            ->where('phase', 'group')
+                            ->first();
+
+                        return 'Format: '
+                            . ($rule?->formatLabel() ?? 'Belum diatur')
+                            . '. Periksa skor sebelum menyimpan. '
+                            . 'Hasil tersimpan tidak dapat ditimpa melalui aksi ini.';
+                    })
+                    ->modalSubmitActionLabel('Simpan Hasil')
+                    ->schema([
+                        TextInput::make('score_one')
+                            ->label(
+                                fn (GroupMatch $record): string =>
+                                    'Skor: ' . $this->pairLabel($record->pairOne)
+                            )
+                            ->numeric()
+                            ->integer()
+                            ->minValue(0)
+                            ->maxValue(65535)
+                            ->required(),
+
+                        TextInput::make('score_two')
+                            ->label(
+                                fn (GroupMatch $record): string =>
+                                    'Skor: ' . $this->pairLabel($record->pairTwo)
+                            )
+                            ->numeric()
+                            ->integer()
+                            ->minValue(0)
+                            ->maxValue(65535)
+                            ->required(),
+                    ])
+                    ->action(function (GroupMatch $record, array $data): void {
+                        $category = $this->getOwnerRecord();
+
+                        abort_unless(
+                            EventCategoryResource::canEdit($category),
+                            403
+                        );
+
+                        // Pastikan pertandingan milik kategori yang sedang dibuka.
+                        $match = $category->groupMatches()
+                            ->where('group_matches.id', $record->getKey())
+                            ->firstOrFail();
+
+                        $actor = Filament::auth()->user();
+
+                        abort_unless($actor instanceof User, 403);
+
+                        try {
+                            app(GroupMatchResultService::class)->record(
+                                $match,
+                                $data['score_one'],
+                                $data['score_two'],
+                                $actor
+                            );
+                        } catch (DomainException $exception) {
+                            Notification::make()
+                                ->title('Hasil tidak dapat disimpan')
+                                ->body($exception->getMessage())
+                                ->danger()
+                                ->persistent()
+                                ->send();
+
+                            throw new Halt();
+                        }
+
+                        Notification::make()
+                            ->title('Hasil pertandingan tersimpan')
+                            ->body('Status pertandingan sekarang selesai.')
+                            ->success()
+                            ->send();
+                    }),
+            ])
             ->toolbarActions([])
             ->defaultSort(
                 fn (Builder $query): Builder => $query

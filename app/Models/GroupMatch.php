@@ -20,6 +20,11 @@ class GroupMatch extends Model
             'pair_one_id' => 'integer',
             'pair_two_id' => 'integer',
             'round_number' => 'integer',
+            'score_one' => 'integer',
+            'score_two' => 'integer',
+            'result_game_count' => 'integer',
+            'result_recorded_at' => 'immutable_datetime',
+            'result_recorded_by' => 'integer',
         ];
     }
 
@@ -50,5 +55,10 @@ class GroupMatch extends Model
     public function schedule(): HasOne
     {
         return $this->hasOne(MatchSchedule::class, 'group_match_id');
+    }
+
+    public function resultRecorder(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'result_recorded_by');
     }
 }

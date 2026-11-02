@@ -16,6 +16,7 @@ use Filament\Tables\Table;
 use App\Filament\Resources\EventCategories\RelationManagers\PairsRelationManager;
 use App\Filament\Resources\EventCategories\RelationManagers\KnockoutMatchesRelationManager;
 use App\Filament\Resources\EventCategories\RelationManagers\GroupMatchesRelationManager;
+use App\Filament\Resources\EventCategories\RelationManagers\ScoringRulesRelationManager;
 
 class EventCategoryResource extends Resource
 {
@@ -47,6 +48,7 @@ class EventCategoryResource extends Resource
             PairsRelationManager::class,
             GroupMatchesRelationManager::class,
             KnockoutMatchesRelationManager::class,
+            ScoringRulesRelationManager::class,
         ];
     }
 
